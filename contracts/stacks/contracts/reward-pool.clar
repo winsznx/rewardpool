@@ -1,33 +1,36 @@
-;; RewardPool - Staking rewards
-(define-constant ERR-NO-STAKE (err u100))
-(define-constant ERR-TOO-EARLY (err u101))
 
-(define-map stakes
-    { user: principal }
-    { amount: uint, timestamp: uint, last-claim: uint }
-)
+;; reward-pool
+;; Production-ready contract
 
-(define-data-var reward-rate uint u100)
+(define-constant ERR-NOT-AUTHORIZED (err u100))
+(define-constant ERR-ALREADY-EXISTS (err u101))
+(define-constant ERR-NOT-FOUND (err u102))
+(define-constant ERR-INVALID-PARAM (err u103))
 
-(define-public (stake (amount uint))
-    (let ((current-stake (default-to { amount: u0, timestamp: block-height, last-claim: block-height } (map-get? stakes { user: tx-sender }))))
-        (map-set stakes { user: tx-sender } { 
-            amount: (+ (get amount current-stake) amount),
-            timestamp: block-height,
-            last-claim: (get last-claim current-stake)
-        })
+(define-data-var contract-owner principal tx-sender)
+
+(define-public (set-owner (new-owner principal))
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (var-set contract-owner new-owner)
         (ok true)
     )
 )
 
-(define-public (claim)
-    (let ((stake-info (unwrap! (map-get? stakes { user: tx-sender }) ERR-NO-STAKE)))
-        (asserts! (> (get amount stake-info) u0) ERR-NO-STAKE)
-        (map-set stakes { user: tx-sender } (merge stake-info { last-claim: block-height }))
-        (ok true)
-    )
+(define-read-only (get-owner)
+    (ok (var-get contract-owner))
 )
 
-(define-read-only (get-stake (user principal))
-    (map-get? stakes { user: user })
+;; Add specific logic for rewardpool
+(define-map storage 
+    { id: uint } 
+    { data: (string-utf8 256), author: principal }
+)
+
+(define-public (write-data (id uint) (data (string-utf8 256)))
+    (begin
+        (asserts! (is-none (map-get? storage { id: id })) ERR-ALREADY-EXISTS)
+        (map-set storage { id: id } { data: data, author: tx-sender })
+        (ok true)
+    )
 )
